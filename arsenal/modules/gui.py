@@ -407,6 +407,222 @@ class CheatslistMenu:
             elif c == curses.KEY_DOWN or c == ord('j'):
                 # Move DOWN (arrow down or vim 'j')
                 self.move_position(1)
+            elif c == ord('G') and not self.insert_mode:
+                # Shift+G in normal mode - Open global options
+                try:
+                    global_menu = GlobalOptionsMenu(self)
+                    global_menu.run(stdscr)
+                    # Redraw main screen after menu closes
+                    stdscr.clear()
+                    stdscr.refresh()
+                except Exception as e:
+                    # Show error if menu fails
+                    stdscr.clear()
+                    stdscr.addstr(0, 0, f"Error opening Global Options: {str(e)}")
+                    stdscr.addstr(1, 0, "Press any key to continue...")
+                    stdscr.refresh()
+                    stdscr.getch()
+                    stdscr.clear()
+
+
+class GlobalOptionsMenu:
+    """Global options menu for setting common variables like DC_IP, USERNAME, etc."""
+    
+    common_vars = [
+        "IP",
+        "Username", 
+        "Password",
+        "Domain",
+        "LHOST",
+        "LPORT",
+        "RHOST",
+        "RPORT",
+    ]
+    
+    current_field = 0
+    values = {}
+    xcursor = None
+    x_init = None
+    y_init = None
+    
+    def __init__(self, prev):
+        self.previous_menu = prev
+        # Load existing values
+        if exists(config.savevarfile):
+            with open(config.savevarfile, 'r') as f:
+                self.values = json.load(f)
+        # Initialize missing fields
+        for var in self.common_vars:
+            if var not in self.values:
+                self.values[var] = ""
+    
+    def draw(self, stdscr):
+        """Draw the global options menu"""
+        try:
+            height, width = stdscr.getmaxyx()
+            stdscr.clear()
+            
+            # Calculate dimensions
+            box_width = min(70, width - 4)
+            box_height = min(len(self.common_vars) + 8, height - 4)
+            start_y = max(0, (height - box_height) // 2)
+            start_x = max(0, (width - box_width) // 2)
+            
+            # Draw border directly on stdscr
+            for y in range(start_y, start_y + box_height):
+                for x in range(start_x, start_x + box_width):
+                    if y == start_y or y == start_y + box_height - 1:
+                        # Top and bottom border
+                        if x == start_x or x == start_x + box_width - 1:
+                            stdscr.addstr(y, x, "+")
+                        else:
+                            stdscr.addstr(y, x, "-")
+                    elif x == start_x or x == start_x + box_width - 1:
+                        # Left and right border
+                        stdscr.addstr(y, x, "|")
+            
+            # Title
+            title = " Global Options (Shift+G) "
+            title_x = start_x + max(1, (box_width - len(title)) // 2)
+            stdscr.addstr(start_y, title_x, title, curses.A_BOLD)
+            
+            # Instructions
+            instructions = "Tab/Down: Navigate | Enter: Save | Esc: Cancel"
+            if len(instructions) < box_width - 4:
+                stdscr.addstr(start_y + box_height - 2, start_x + 2, instructions)
+            
+            # Draw fields
+            for idx, var in enumerate(self.common_vars):
+                y = start_y + 2 + idx
+                if y >= start_y + box_height - 3:
+                    break
+                    
+                # Variable name
+                var_label = f"{var}:"
+                stdscr.addstr(y, start_x + 2, var_label.ljust(15))
+                
+                # Value field
+                value = self.values.get(var, "")
+                max_value_len = box_width - 20
+                display_value = value[:max_value_len] if len(value) <= max_value_len else value[:max_value_len]
+                
+                if idx == self.current_field:
+                    # Highlighted field - inverse video
+                    field_text = display_value.ljust(max_value_len)
+                    stdscr.addstr(y, start_x + 18, field_text, curses.A_REVERSE)
+                else:
+                    if display_value:
+                        stdscr.addstr(y, start_x + 18, display_value)
+            
+            # Set cursor position for current field
+            cursor_y = start_y + 2 + self.current_field
+            cursor_x = start_x + 18
+            
+            if self.xcursor is None or self.x_init is None:
+                current_var = self.common_vars[self.current_field]
+                self.x_init = cursor_x
+                self.y_init = cursor_y
+                self.xcursor = cursor_x + len(self.values.get(current_var, ""))
+            
+            # Enable cursor and set position
+            curses.curs_set(1)
+            stdscr.move(cursor_y, self.xcursor)
+            stdscr.refresh()
+            
+        except Exception as e:
+            # Debug: show error
+            stdscr.clear()
+            stdscr.addstr(0, 0, f"Error in draw: {str(e)}")
+            stdscr.addstr(1, 0, f"Terminal size: {height}x{width}")
+            stdscr.addstr(2, 0, f"Box size: {box_height}x{box_width}")
+            stdscr.addstr(3, 0, f"Position: ({start_y},{start_x})")
+            stdscr.addstr(4, 0, "Press any key...")
+            stdscr.refresh()
+            stdscr.getch()
+    
+    def save_values(self):
+        """Save values to config file"""
+        # Remove empty values
+        filtered_values = {k: v for k, v in self.values.items() if v}
+        with open(config.savevarfile, 'w') as f:
+            json.dump(filtered_values, f, indent=2)
+        # Update Gui global vars
+        Gui.arsenalGlobalVars = filtered_values
+    
+    def run(self, stdscr):
+        """Run the global options menu"""
+        Gui.init_colors()
+        
+        while True:
+            self.draw(stdscr)
+            c = stdscr.getch()
+            
+            if c == curses.KEY_ENTER or c == 10 or c == 13:
+                # Save and close
+                self.save_values()
+                break
+            elif c == 27:  # Esc
+                # Cancel without saving
+                break
+            elif c == 9 or c == curses.KEY_DOWN:  # Tab or Down
+                # Next field
+                self.current_field = (self.current_field + 1) % len(self.common_vars)
+                self.xcursor = None
+                self.x_init = None
+                self.y_init = None
+            elif c == curses.KEY_UP:
+                # Previous field
+                self.current_field = (self.current_field - 1) % len(self.common_vars)
+                self.xcursor = None
+                self.x_init = None
+                self.y_init = None
+            elif c == curses.KEY_BACKSPACE or c == 127 or c == 8:
+                # Delete character
+                var = self.common_vars[self.current_field]
+                value = self.values.get(var, "")
+                if value and self.xcursor and self.x_init and self.xcursor > self.x_init:
+                    i = self.xcursor - self.x_init - 1
+                    self.values[var] = value[:i] + value[i + 1:]
+                    self.xcursor -= 1
+            elif c == curses.KEY_DC:  # Delete key
+                # Delete character at cursor
+                var = self.common_vars[self.current_field]
+                value = self.values.get(var, "")
+                if self.xcursor and self.x_init:
+                    i = self.xcursor - self.x_init
+                    if i < len(value):
+                        self.values[var] = value[:i] + value[i + 1:]
+            elif c == curses.KEY_LEFT:
+                # Move cursor left
+                if self.xcursor and self.x_init and self.xcursor > self.x_init:
+                    self.xcursor -= 1
+            elif c == curses.KEY_RIGHT:
+                # Move cursor right
+                var = self.common_vars[self.current_field]
+                value = self.values.get(var, "")
+                if self.xcursor and self.x_init and self.xcursor < self.x_init + len(value):
+                    self.xcursor += 1
+            elif c == curses.KEY_HOME:
+                # Move to start
+                if self.x_init:
+                    self.xcursor = self.x_init
+            elif c == curses.KEY_END:
+                # Move to end
+                var = self.common_vars[self.current_field]
+                value = self.values.get(var, "")
+                if self.x_init:
+                    self.xcursor = self.x_init + len(value)
+            elif 32 <= c < 127:
+                # Type character
+                var = self.common_vars[self.current_field]
+                value = self.values.get(var, "")
+                if self.xcursor and self.x_init:
+                    i = self.xcursor - self.x_init
+                    self.values[var] = value[:i] + chr(c) + value[i:]
+                    self.xcursor += 1
+                else:
+                    # First character being typed
+                    self.values[var] = value + chr(c)
 
 
 class ArgslistMenu:
