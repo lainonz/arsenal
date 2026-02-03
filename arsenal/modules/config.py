@@ -10,13 +10,11 @@ EXCLUDE_LIST = ["README.md", "README.rst", "index.rst"]
 FUZZING_DIRS = ["/usr/local/share/wordlists/**/*.txt"]
 
 CHEATS_PATHS = [
-    join(DATAPATH, "cheats"),  # DEFAULT
+    # join(DATAPATH, "cheats"),  # DEFAULT
     # Additional paths below, add comma to line above
-    join(BASEPATH, "my_cheats"),
-    join(HOMEPATH, ".cheats"),
-    # Add exegol folder
-    "/opt/my-resources/my-cheats",
-    "/opt/my-resources/setup/arsenal-cheats"
+    # join(BASEPATH, "my_cheats"),
+    # join(HOMEPATH, ".cheats"),
+    "/home/user/.work/Code/cheater/"
 ]
 
 messages_error_missing_arguments = 'Error missing arguments'
