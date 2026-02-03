@@ -23,9 +23,9 @@ class CheatslistMenu:
     xcursor = None
     x_init = None
     y_init = None
+    insert_mode = False  # vim-like insert mode toggle
 
-    @staticmethod
-    def draw_prompt():
+    def draw_prompt(self):
         """
         Create a prompt box
         at x : 0 / y : 5
@@ -36,9 +36,15 @@ class CheatslistMenu:
         ncols, nlines = 5, 1
         promptwin = curses.newwin(nlines, ncols, y, x)
         try:
-            promptwin.addstr("\u2620  >", curses.color_pair(Gui.BASIC_COLOR))
+            if self.insert_mode:
+                promptwin.addstr("✎  >", curses.color_pair(Gui.BASIC_COLOR))
+            else:
+                promptwin.addstr("\u2620  >", curses.color_pair(Gui.BASIC_COLOR))
         except:
-            promptwin.addstr(">>>>", curses.color_pair(Gui.BASIC_COLOR))
+            if self.insert_mode:
+                promptwin.addstr("I>>", curses.color_pair(Gui.BASIC_COLOR))
+            else:
+                promptwin.addstr(">>>>", curses.color_pair(Gui.BASIC_COLOR))
         promptwin.refresh()
         return promptwin
 
@@ -241,6 +247,11 @@ class CheatslistMenu:
         if self.x_init is None or self.y_init is None or self.xcursor is None:
             self.y_init, self.x_init = curses.getsyx()
             self.xcursor = self.x_init
+        # set cursor style based on mode (vim-like)
+        if self.insert_mode:
+            curses.curs_set(1)  # Insert mode: normal cursor (vertical bar)
+        else:
+            curses.curs_set(2)  # Normal mode: block cursor
         # set cursor position
         curses.setsyx(self.y_init, self.xcursor)
         curses.doupdate()
@@ -311,6 +322,12 @@ class CheatslistMenu:
             self.cheats = self.search()
             self.draw(stdscr)
             c = stdscr.getch()
+            
+            # Handle Escape or Ctrl+[ to exit insert mode
+            if (c == 27 or c == 26) and self.insert_mode:
+                self.insert_mode = False
+                continue
+            
             if c == curses.KEY_ENTER or c == 10 or c == 13:
                 # Process selected command (if not empty)
                 if self.selected_cheat() is not None:
@@ -325,64 +342,71 @@ class CheatslistMenu:
             elif c == curses.KEY_F10 or c == 27:
                 Gui.cmd = None
                 break  # Exit the while loop
+            elif c == ord('i') and not self.insert_mode:
+                # Enter insert mode (vim-like)
+                self.insert_mode = True
+                continue
+            # In insert mode, only allow text input and basic editing
+            elif self.insert_mode:
+                if c == curses.KEY_BACKSPACE or c == 127 or c == 8:
+                    if self.check_move_cursor(-1):
+                        i = self.xcursor - self.x_init - 1
+                        self.input_buffer = self.input_buffer[:i] + self.input_buffer[i + 1:]
+                        self.xcursor -= 1
+                        # new search -> reset position
+                        self.position = 0
+                        self.page_position = 0
+                elif c == curses.KEY_DC or c == 127:
+                    if self.check_move_cursor(1):
+                        i = self.xcursor - self.x_init - 1
+                        self.input_buffer = self.input_buffer[:i + 1] + self.input_buffer[i + 2:]
+                        # new search -> reset position
+                        self.position = 0
+                        self.page_position = 0
+                elif c == curses.KEY_LEFT:
+                    # Move cursor LEFT
+                    if self.check_move_cursor(-1): self.xcursor -= 1
+                elif c == curses.KEY_RIGHT:
+                    # Move cursor RIGHT
+                    if self.check_move_cursor(1): self.xcursor += 1
+                elif c == curses.KEY_BEG or c == curses.KEY_HOME:
+                    # Move cursor to the BEGIN
+                    self.xcursor = self.x_init
+                elif c == curses.KEY_END:
+                    # Move cursor to the END
+                    self.xcursor = self.x_init + len(self.input_buffer)
+                elif c == 9:
+                    # TAB cmd auto complete
+                    if self.input_buffer != "":
+                        predictions = []
+                        for cheat in self.cheats:
+                            if cheat.command.startswith(self.input_buffer):
+                                predictions.append(cheat.command)
+                        if len(predictions) != 0:
+                            self.input_buffer = commonprefix(predictions)
+                            self.xcursor = self.x_init + len(self.input_buffer)
+                            self.position = 0
+                            self.page_position = 0
+                elif 20 <= c < 127:
+                    i = self.xcursor - self.x_init
+                    self.input_buffer = self.input_buffer[:i] + chr(c) + self.input_buffer[i:]
+                    self.xcursor += 1
+                    # new search -> reset position
+                    self.position = 0
+                    self.page_position = 0
+            # Normal mode navigation (j, k, etc.)
             elif c == 339 or c == curses.KEY_PPAGE:
                 # Page UP
                 self.move_page(-1)
             elif c == 338 or c == curses.KEY_NPAGE:
                 # Page DOWN
                 self.move_page(1)
-            elif c == curses.KEY_UP:
-                # Move UP
+            elif c == curses.KEY_UP or c == ord('k'):
+                # Move UP (arrow up or vim 'k')
                 self.move_position(-1)
-            elif c == curses.KEY_DOWN:
-                # Move DOWN
+            elif c == curses.KEY_DOWN or c == ord('j'):
+                # Move DOWN (arrow down or vim 'j')
                 self.move_position(1)
-            elif c == curses.KEY_BACKSPACE or c == 127 or c == 8:
-                if self.check_move_cursor(-1):
-                    i = self.xcursor - self.x_init - 1
-                    self.input_buffer = self.input_buffer[:i] + self.input_buffer[i + 1:]
-                    self.xcursor -= 1
-                    # new search -> reset position
-                    self.position = 0
-                    self.page_position = 0
-            elif c == curses.KEY_DC or c == 127:
-                if self.check_move_cursor(1):
-                    i = self.xcursor - self.x_init - 1
-                    self.input_buffer = self.input_buffer[:i + 1] + self.input_buffer[i + 2:]
-                    # new search -> reset position
-                    self.position = 0
-                    self.page_position = 0
-            elif c == curses.KEY_LEFT:
-                # Move cursor LEFT
-                if self.check_move_cursor(-1): self.xcursor -= 1
-            elif c == curses.KEY_RIGHT:
-                # Move cursor RIGHT
-                if self.check_move_cursor(1): self.xcursor += 1
-            elif c == curses.KEY_BEG or c == curses.KEY_HOME:
-                # Move cursor to the BEGIN
-                self.xcursor = self.x_init
-            elif c == curses.KEY_END:
-                # Move cursor to the END
-                self.xcursor = self.x_init + len(self.input_buffer)
-            elif c == 9:
-                # TAB cmd auto complete
-                if self.input_buffer != "":
-                    predictions = []
-                    for cheat in self.cheats:
-                        if cheat.command.startswith(self.input_buffer):
-                            predictions.append(cheat.command)
-                    if len(predictions) != 0:
-                        self.input_buffer = commonprefix(predictions)
-                        self.xcursor = self.x_init + len(self.input_buffer)
-                        self.position = 0
-                        self.page_position = 0
-            elif 20 <= c < 127:
-                i = self.xcursor - self.x_init
-                self.input_buffer = self.input_buffer[:i] + chr(c) + self.input_buffer[i:]
-                self.xcursor += 1
-                # new search -> reset position
-                self.position = 0
-                self.page_position = 0
 
 
 class ArgslistMenu:
