@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# Capture original working directory BEFORE changing to arsenal dir
+export ARSENAL_LAUNCH_DIR="$PWD"
+
 if [ -L $0 ] ; then
     DIR=$(dirname "$(readlink -f "$0")") ;
 else
