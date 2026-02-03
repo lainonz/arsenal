@@ -2,6 +2,7 @@ import time
 import curses
 import math
 import json
+import os
 from curses import wrapper
 from os.path import commonprefix, exists, isdir
 from os import sep
@@ -64,6 +65,10 @@ class CheatslistMenu:
             #                curses.color_pair(Gui.INFO_DESC_COLOR))
             infowin.addstr(y + 2, x + 2, Gui.draw_string(selected_cheat.printable_command, self.width - 3),
                            curses.color_pair(Gui.INFO_CMD_COLOR))
+        # Show current working directory in top-right corner
+        cwd_text = f"CWD: {config.ORIGINAL_CWD}"
+        if len(cwd_text) < self.width - 4:
+            infowin.addstr(y, self.width - len(cwd_text) - 2, cwd_text, curses.color_pair(Gui.INFO_DESC_COLOR))
         infowin.border()
         infowin.refresh()
         return infowin
@@ -874,6 +879,14 @@ class ArgslistMenu:
 
             # draw description
             self.draw_desc_preview(argprev, padding_text_border, desc_pos, description_lines)
+            
+            # Show current working directory at bottom of args box
+            cwd_info = f" CWD: {config.ORIGINAL_CWD} "
+            if len(cwd_info) < ncols - 4:
+                try:
+                    argprev.addstr(nlines - 1, 2, cwd_info, curses.color_pair(Gui.INFO_DESC_COLOR))
+                except:
+                    pass  # Ignore if it doesn't fit
 
             if len(Gui.cmd.args) > 0:
                 self.draw_args_list(args_pos)
@@ -902,23 +915,34 @@ class ArgslistMenu:
         """
         # current argument value
         argument = Gui.cmd.args[self.current_arg][1]
-        # look for all files that match the argument in the working directory
-        matches = glob.glob('{}*'.format(argument))
-
-        if not matches:
-            return False
-
-        # init the autocompleted argument
+        
+        # Save current directory and switch to original working directory
+        current_dir = os.getcwd()
+        matches = []
         autocompleted_argument = ""
-        # autocompleted argument is the longest start common string in all matches
-        for i in range(len(min(matches))):
-            if not all(min(matches)[:i + 1] == match[:i + 1] for match in matches):
-                break
-            autocompleted_argument = min(matches)[:i + 1]
+        
+        try:
+            os.chdir(config.ORIGINAL_CWD)
+            # look for all files that match the argument in the working directory
+            matches = glob.glob('{}*'.format(argument))
+            
+            if not matches:
+                return False
 
-        # add a "/" at the end of the autocompleted argument if it is a directory
-        if isdir(autocompleted_argument) and autocompleted_argument[-1] != sep:
-            autocompleted_argument = autocompleted_argument + sep
+            # init the autocompleted argument
+            # autocompleted argument is the longest start common string in all matches
+            for i in range(len(min(matches))):
+                if not all(min(matches)[:i + 1] == match[:i + 1] for match in matches):
+                    break
+                autocompleted_argument = min(matches)[:i + 1]
+
+            # add a "/" at the end of the autocompleted argument if it is a directory
+            # Check while still in ORIGINAL_CWD
+            if isdir(autocompleted_argument) and autocompleted_argument[-1] != sep:
+                autocompleted_argument = autocompleted_argument + sep
+        finally:
+            # Always restore the directory
+            os.chdir(current_dir)
 
         # autocomplete the argument 
         Gui.cmd.args[self.current_arg][1] = autocompleted_argument

@@ -1,6 +1,11 @@
 import os
 from os.path import dirname, abspath, expanduser, join
 
+# Save original working directory where user launched arsenal
+# ARSENAL_LAUNCH_DIR is set by the 'run' script before cd to arsenal directory
+# This preserves the user's actual working directory for file operations
+ORIGINAL_CWD = os.environ.get('ARSENAL_LAUNCH_DIR', os.getcwd())
+
 # Base paths
 DATAPATH = join(dirname(dirname(abspath(__file__))), 'data')
 BASEPATH = dirname(dirname(dirname(abspath(__file__))))
@@ -13,8 +18,7 @@ CHEATS_PATHS = [
     # join(DATAPATH, "cheats"),  # DEFAULT
     # Additional paths below, add comma to line above
     # join(BASEPATH, "my_cheats"),
-    # join(HOMEPATH, ".cheats"),
-    "/home/user/.work/Code/cheater/"
+    join(HOMEPATH, ".cheats"),
 ]
 
 messages_error_missing_arguments = 'Error missing arguments'
