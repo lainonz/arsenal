@@ -24,7 +24,6 @@ class CheatslistMenu:
     xcursor = None
     x_init = None
     y_init = None
-    insert_mode = False  # vim-like insert mode toggle
 
     def draw_prompt(self):
         """
@@ -37,15 +36,9 @@ class CheatslistMenu:
         ncols, nlines = 5, 1
         promptwin = curses.newwin(nlines, ncols, y, x)
         try:
-            if self.insert_mode:
-                promptwin.addstr("✎  >", curses.color_pair(Gui.BASIC_COLOR))
-            else:
-                promptwin.addstr("\u2620  >", curses.color_pair(Gui.BASIC_COLOR))
+            promptwin.addstr("  >", curses.color_pair(Gui.BASIC_COLOR))
         except:
-            if self.insert_mode:
-                promptwin.addstr("I>>", curses.color_pair(Gui.BASIC_COLOR))
-            else:
-                promptwin.addstr(">>>>", curses.color_pair(Gui.BASIC_COLOR))
+            promptwin.addstr(">>>", curses.color_pair(Gui.BASIC_COLOR))
         promptwin.refresh()
         return promptwin
 
@@ -252,11 +245,8 @@ class CheatslistMenu:
         if self.x_init is None or self.y_init is None or self.xcursor is None:
             self.y_init, self.x_init = curses.getsyx()
             self.xcursor = self.x_init
-        # set cursor style based on mode (vim-like)
-        if self.insert_mode:
-            curses.curs_set(1)  # Insert mode: normal cursor (vertical bar)
-        else:
-            curses.curs_set(2)  # Normal mode: block cursor
+        # set cursor as normal block cursor
+        curses.curs_set(2)
         # set cursor position
         curses.setsyx(self.y_init, self.xcursor)
         curses.doupdate()
@@ -328,11 +318,6 @@ class CheatslistMenu:
             self.draw(stdscr)
             c = stdscr.getch()
             
-            # Handle Escape or Ctrl+[ to exit insert mode
-            if (c == 27 or c == 26) and self.insert_mode:
-                self.insert_mode = False
-                continue
-            
             if c == curses.KEY_ENTER or c == 10 or c == 13:
                 # Process selected command (if not empty)
                 if self.selected_cheat() is not None:
@@ -347,73 +332,21 @@ class CheatslistMenu:
             elif c == curses.KEY_F10 or c == 27:
                 Gui.cmd = None
                 break  # Exit the while loop
-            elif c == ord('i') and not self.insert_mode:
-                # Enter insert mode (vim-like)
-                self.insert_mode = True
-                continue
-            # In insert mode, only allow text input and basic editing
-            elif self.insert_mode:
-                if c == curses.KEY_BACKSPACE or c == 127 or c == 8:
-                    if self.check_move_cursor(-1):
-                        i = self.xcursor - self.x_init - 1
-                        self.input_buffer = self.input_buffer[:i] + self.input_buffer[i + 1:]
-                        self.xcursor -= 1
-                        # new search -> reset position
-                        self.position = 0
-                        self.page_position = 0
-                elif c == curses.KEY_DC or c == 127:
-                    if self.check_move_cursor(1):
-                        i = self.xcursor - self.x_init - 1
-                        self.input_buffer = self.input_buffer[:i + 1] + self.input_buffer[i + 2:]
-                        # new search -> reset position
-                        self.position = 0
-                        self.page_position = 0
-                elif c == curses.KEY_LEFT:
-                    # Move cursor LEFT
-                    if self.check_move_cursor(-1): self.xcursor -= 1
-                elif c == curses.KEY_RIGHT:
-                    # Move cursor RIGHT
-                    if self.check_move_cursor(1): self.xcursor += 1
-                elif c == curses.KEY_BEG or c == curses.KEY_HOME:
-                    # Move cursor to the BEGIN
-                    self.xcursor = self.x_init
-                elif c == curses.KEY_END:
-                    # Move cursor to the END
-                    self.xcursor = self.x_init + len(self.input_buffer)
-                elif c == 9:
-                    # TAB cmd auto complete
-                    if self.input_buffer != "":
-                        predictions = []
-                        for cheat in self.cheats:
-                            if cheat.command.startswith(self.input_buffer):
-                                predictions.append(cheat.command)
-                        if len(predictions) != 0:
-                            self.input_buffer = commonprefix(predictions)
-                            self.xcursor = self.x_init + len(self.input_buffer)
-                            self.position = 0
-                            self.page_position = 0
-                elif 20 <= c < 127:
-                    i = self.xcursor - self.x_init
-                    self.input_buffer = self.input_buffer[:i] + chr(c) + self.input_buffer[i:]
-                    self.xcursor += 1
-                    # new search -> reset position
-                    self.position = 0
-                    self.page_position = 0
-            # Normal mode navigation (j, k, etc.)
+            # In normal mode, handle navigation and search input
+            elif c == curses.KEY_UP:
+                # Move UP in cheats list
+                self.move_position(-1)
+            elif c == curses.KEY_DOWN:
+                # Move DOWN in cheats list
+                self.move_position(1)
             elif c == 339 or c == curses.KEY_PPAGE:
                 # Page UP
                 self.move_page(-1)
             elif c == 338 or c == curses.KEY_NPAGE:
                 # Page DOWN
                 self.move_page(1)
-            elif c == curses.KEY_UP or c == ord('k'):
-                # Move UP (arrow up or vim 'k')
-                self.move_position(-1)
-            elif c == curses.KEY_DOWN or c == ord('j'):
-                # Move DOWN (arrow down or vim 'j')
-                self.move_position(1)
-            elif c == ord('G') and not self.insert_mode:
-                # Shift+G in normal mode - Open global options
+            elif c == ord('G'):
+                # Shift+G - Open global options
                 try:
                     global_menu = GlobalOptionsMenu(self)
                     global_menu.run(stdscr)
@@ -428,6 +361,238 @@ class CheatslistMenu:
                     stdscr.refresh()
                     stdscr.getch()
                     stdscr.clear()
+            elif c == 9:
+                # TAB cmd auto complete
+                if self.input_buffer != "":
+                    predictions = []
+                    for cheat in self.cheats:
+                        if cheat.command.startswith(self.input_buffer):
+                            predictions.append(cheat.command)
+                    if len(predictions) != 0:
+                        self.input_buffer = commonprefix(predictions)
+                        self.xcursor = self.x_init + len(self.input_buffer)
+                        self.position = 0
+                        self.page_position = 0
+            elif c == curses.KEY_BACKSPACE or c == 127 or c == 8:
+                # Delete character
+                if self.check_move_cursor(-1):
+                    i = self.xcursor - self.x_init - 1
+                    self.input_buffer = self.input_buffer[:i] + self.input_buffer[i + 1:]
+                    self.xcursor -= 1
+                    # new search -> reset position
+                    self.position = 0
+                    self.page_position = 0
+            elif c == curses.KEY_DC or c == 127:
+                # Delete character at cursor
+                if self.check_move_cursor(1):
+                    i = self.xcursor - self.x_init - 1
+                    self.input_buffer = self.input_buffer[:i + 1] + self.input_buffer[i + 2:]
+                    # new search -> reset position
+                    self.position = 0
+                    self.page_position = 0
+            elif c == curses.KEY_LEFT:
+                # Move cursor LEFT in search box
+                if self.check_move_cursor(-1): 
+                    self.xcursor -= 1
+            elif c == curses.KEY_RIGHT:
+                # Move cursor RIGHT in search box
+                if self.check_move_cursor(1): 
+                    self.xcursor += 1
+            elif c == curses.KEY_BEG or c == curses.KEY_HOME:
+                # Move cursor to the BEGIN of search box
+                self.xcursor = self.x_init
+            elif c == curses.KEY_END:
+                # Move cursor to the END of search box
+                self.xcursor = self.x_init + len(self.input_buffer)
+            elif 32 <= c < 127:
+                # Type character in search box
+                i = self.xcursor - self.x_init
+                self.input_buffer = self.input_buffer[:i] + chr(c) + self.input_buffer[i:]
+                self.xcursor += 1
+                # new search -> reset position
+                self.position = 0
+                self.page_position = 0
+
+
+class FilePicker:
+    """File picker menu for selecting files to append to arguments"""
+    
+    def __init__(self, initial_path=None):
+        self.current_dir = initial_path or config.ORIGINAL_CWD
+        self.files = []
+        self.dirs = []
+        self.current_position = 0
+        self.selected_file = None
+        self.load_directory()
+    
+    def load_directory(self):
+        """Load files and directories from current directory"""
+        try:
+            self.files = []
+            self.dirs = []
+            
+            # Add parent directory option (..)
+            if self.current_dir != '/':
+                self.dirs.append('..')
+            
+            # List all items in directory
+            for item in sorted(os.listdir(self.current_dir)):
+                full_path = os.path.join(self.current_dir, item)
+                if os.path.isdir(full_path):
+                    self.dirs.append(item)
+                else:
+                    self.files.append(item)
+            
+            # Reset position when loading new directory
+            self.current_position = 0
+        except PermissionError:
+            self.files = []
+            self.dirs = []
+    
+    def get_items(self):
+        """Get all items (dirs first, then files)"""
+        return self.dirs + self.files
+    
+    def draw(self, stdscr):
+        """Draw the file picker menu"""
+        try:
+            height, width = stdscr.getmaxyx()
+            stdscr.clear()
+            
+            # Calculate dimensions
+            box_width = min(80, width - 4)
+            max_items_visible = min(20, height - 8)
+            items = self.get_items()
+            box_height = min(len(items) + 6, height - 4)
+            
+            start_y = max(0, (height - box_height) // 2)
+            start_x = max(0, (width - box_width) // 2)
+            
+            # Draw border
+            for y in range(start_y, start_y + box_height):
+                for x in range(start_x, start_x + box_width):
+                    if y == start_y or y == start_y + box_height - 1:
+                        if x == start_x or x == start_x + box_width - 1:
+                            stdscr.addstr(y, x, "+")
+                        else:
+                            stdscr.addstr(y, x, "-")
+                    elif x == start_x or x == start_x + box_width - 1:
+                        stdscr.addstr(y, x, "|")
+            
+            # Title
+            title = " File Picker (Ctrl+F) "
+            title_x = start_x + max(1, (box_width - len(title)) // 2)
+            stdscr.addstr(start_y, title_x, title, curses.A_BOLD)
+            
+            # Current directory
+            dir_text = f" {self.current_dir} "
+            if len(dir_text) < box_width - 4:
+                stdscr.addstr(start_y + 1, start_x + 2, dir_text[:box_width - 4])
+            
+            # Instructions
+            instructions = "j/k: Navigate | Enter: Select/Open | Esc: Cancel"
+            if len(instructions) < box_width - 4:
+                stdscr.addstr(start_y + box_height - 2, start_x + 2, instructions[:box_width - 4])
+            
+            # Draw file list
+            items = self.get_items()
+            start_item = max(0, self.current_position - max_items_visible // 2)
+            
+            for idx, item in enumerate(items[start_item:start_item + max_items_visible]):
+                y = start_y + 3 + idx
+                actual_idx = start_item + idx
+                
+                if y >= start_y + box_height - 2:
+                    break
+                
+                # Check if this is a directory
+                is_dir = actual_idx < len(self.dirs)
+                item_display = f"  {item}/" if is_dir else f"  {item}"
+                
+                # Truncate if too long
+                if len(item_display) > box_width - 6:
+                    item_display = item_display[:box_width - 9] + "..."
+                
+                if actual_idx == self.current_position:
+                    # Highlight current selection
+                    stdscr.addstr(y, start_x + 2, item_display, curses.A_REVERSE)
+                else:
+                    # Different color for directories
+                    if is_dir:
+                        stdscr.addstr(y, start_x + 2, item_display, curses.color_pair(Gui.INFO_NAME_COLOR))
+                    else:
+                        stdscr.addstr(y, start_x + 2, item_display, curses.color_pair(Gui.BASIC_COLOR))
+            
+            # Show counter
+            counter = f"{self.current_position + 1}/{len(items)}" if items else "0/0"
+            counter_x = start_x + box_width - len(counter) - 3
+            if counter_x > start_x + 2:
+                stdscr.addstr(start_y + 2, counter_x, counter)
+            
+            stdscr.refresh()
+            
+        except Exception as e:
+            stdscr.clear()
+            stdscr.addstr(0, 0, f"Error in FilePicker: {str(e)}")
+            stdscr.addstr(1, 0, "Press any key...")
+            stdscr.refresh()
+            stdscr.getch()
+    
+    def run(self, stdscr):
+        """Run the file picker"""
+        Gui.init_colors()
+        
+        while True:
+            self.draw(stdscr)
+            c = stdscr.getch()
+            
+            items = self.get_items()
+            
+            if c == curses.KEY_ENTER or c == 10 or c == 13:
+                # Select or open
+                if self.current_position < len(items):
+                    selected = items[self.current_position]
+                    
+                    if self.current_position < len(self.dirs):
+                        # It's a directory
+                        if selected == '..':
+                            # Go to parent directory
+                            self.current_dir = os.path.dirname(self.current_dir.rstrip('/'))
+                        else:
+                            # Go to subdirectory
+                            self.current_dir = os.path.join(self.current_dir, selected)
+                        self.load_directory()
+                    else:
+                        # It's a file - return relative path from ORIGINAL_CWD
+                        self.selected_file = os.path.relpath(
+                            os.path.join(self.current_dir, selected),
+                            config.ORIGINAL_CWD
+                        )
+                        break
+                else:
+                    break
+            
+            elif c == 27:  # Esc
+                break
+            
+            elif c == curses.KEY_UP or c == ord('k'):
+                # Move up
+                if self.current_position > 0:
+                    self.current_position -= 1
+            
+            elif c == curses.KEY_DOWN or c == ord('j'):
+                # Move down
+                if self.current_position < len(items) - 1:
+                    self.current_position += 1
+            
+            elif c == curses.KEY_HOME:
+                # Jump to start
+                self.current_position = 0
+            
+            elif c == curses.KEY_END:
+                # Jump to end
+                if items:
+                    self.current_position = len(items) - 1
 
 
 class GlobalOptionsMenu:
@@ -984,6 +1149,25 @@ class ArgslistMenu:
                     # go to the next argument
                     else:
                         self.next_arg()
+            elif c == ord('@'):
+                # @: Open file picker
+                if Gui.cmd.args:
+                    try:
+                        file_picker = FilePicker(config.ORIGINAL_CWD)
+                        file_picker.run(stdscr)
+                        if file_picker.selected_file:
+                            # Append selected file to current argument
+                            current_value = Gui.cmd.args[self.current_arg][1]
+                            if current_value and not current_value.endswith(' '):
+                                Gui.cmd.args[self.current_arg][1] = current_value + ' ' + file_picker.selected_file
+                            else:
+                                Gui.cmd.args[self.current_arg][1] = current_value + file_picker.selected_file
+                            # Update cursor position
+                            self.xcursor = self.x_init + len(Gui.cmd.args[self.current_arg][1])
+                        # Redraw args menu
+                        stdscr.clear()
+                    except Exception as e:
+                        pass  # Silently fail if file picker has issues
             elif c == 20:
                 try:
                     from pyfzf.pyfzf import FzfPrompt
